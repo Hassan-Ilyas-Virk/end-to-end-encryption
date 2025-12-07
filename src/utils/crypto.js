@@ -1,8 +1,12 @@
 /**
  * Cryptographic Utilities using Web Crypto API
  * Implements RSA, ECDH, ECDSA, and AES-GCM encryption
- * All operations use browser's native SubtleCrypto API
+ * Works in both browser and Node.js environments
  */
+
+// Detect environment and get appropriate crypto object
+const isBrowser = typeof window !== 'undefined';
+const crypto = isBrowser ? window.crypto : (await import('crypto')).webcrypto;
 
 // ==================== KEY GENERATION ====================
 
@@ -12,7 +16,7 @@
  */
 export async function generateECDHKeyPair() {
   try {
-    const keyPair = await window.crypto.subtle.generateKey(
+    const keyPair = await crypto.subtle.generateKey(
       {
         name: 'ECDH',
         namedCurve: 'P-384', // Using P-384 as required
@@ -33,7 +37,7 @@ export async function generateECDHKeyPair() {
  */
 export async function generateECDSAKeyPair() {
   try {
-    const keyPair = await window.crypto.subtle.generateKey(
+    const keyPair = await crypto.subtle.generateKey(
       {
         name: 'ECDSA',
         namedCurve: 'P-384',
@@ -57,7 +61,7 @@ export async function generateECDSAKeyPair() {
  */
 export async function exportPublicKey(publicKey) {
   try {
-    const exported = await window.crypto.subtle.exportKey('spki', publicKey);
+    const exported = await crypto.subtle.exportKey('spki', publicKey);
     return arrayBufferToBase64(exported);
   } catch (error) {
     console.error('Error exporting public key:', error);
@@ -72,7 +76,7 @@ export async function exportPublicKey(publicKey) {
  */
 export async function exportPrivateKey(privateKey) {
   try {
-    const exported = await window.crypto.subtle.exportKey('pkcs8', privateKey);
+    const exported = await crypto.subtle.exportKey('pkcs8', privateKey);
     return arrayBufferToBase64(exported);
   } catch (error) {
     console.error('Error exporting private key:', error);
@@ -88,7 +92,7 @@ export async function exportPrivateKey(privateKey) {
 export async function importECDHPublicKey(base64Key) {
   try {
     const keyData = base64ToArrayBuffer(base64Key);
-    return await window.crypto.subtle.importKey(
+    return await crypto.subtle.importKey(
       'spki',
       keyData,
       {
@@ -112,7 +116,7 @@ export async function importECDHPublicKey(base64Key) {
 export async function importECDHPrivateKey(base64Key) {
   try {
     const keyData = base64ToArrayBuffer(base64Key);
-    return await window.crypto.subtle.importKey(
+    return await crypto.subtle.importKey(
       'pkcs8',
       keyData,
       {
@@ -136,7 +140,7 @@ export async function importECDHPrivateKey(base64Key) {
 export async function importECDSAPublicKey(base64Key) {
   try {
     const keyData = base64ToArrayBuffer(base64Key);
-    return await window.crypto.subtle.importKey(
+    return await crypto.subtle.importKey(
       'spki',
       keyData,
       {
@@ -160,7 +164,7 @@ export async function importECDSAPublicKey(base64Key) {
 export async function importECDSAPrivateKey(base64Key) {
   try {
     const keyData = base64ToArrayBuffer(base64Key);
-    return await window.crypto.subtle.importKey(
+    return await crypto.subtle.importKey(
       'pkcs8',
       keyData,
       {
@@ -186,7 +190,7 @@ export async function importECDSAPrivateKey(base64Key) {
  */
 export async function deriveSharedSecret(privateKey, publicKey) {
   try {
-    const sharedBits = await window.crypto.subtle.deriveBits(
+    const sharedBits = await crypto.subtle.deriveBits(
       {
         name: 'ECDH',
         public: publicKey,
@@ -210,7 +214,7 @@ export async function deriveSharedSecret(privateKey, publicKey) {
 export async function deriveSessionKey(sharedSecret, salt) {
   try {
     // Import shared secret as raw key material
-    const sharedKey = await window.crypto.subtle.importKey(
+    const sharedKey = await crypto.subtle.importKey(
       'raw',
       sharedSecret,
       { name: 'HKDF' },
@@ -219,7 +223,7 @@ export async function deriveSessionKey(sharedSecret, salt) {
     );
 
     // Derive AES-GCM key using HKDF
-    const sessionKey = await window.crypto.subtle.deriveKey(
+    const sessionKey = await crypto.subtle.deriveKey(
       {
         name: 'HKDF',
         hash: 'SHA-256',
@@ -250,7 +254,7 @@ export async function deriveSessionKey(sharedSecret, salt) {
 export async function signData(privateKey, data) {
   try {
     const dataBuffer = stringToArrayBuffer(data);
-    const signature = await window.crypto.subtle.sign(
+    const signature = await crypto.subtle.sign(
       {
         name: 'ECDSA',
         hash: { name: 'SHA-384' },
@@ -276,8 +280,8 @@ export async function verifySignature(publicKey, signature, data) {
   try {
     const signatureBuffer = base64ToArrayBuffer(signature);
     const dataBuffer = stringToArrayBuffer(data);
-    
-    const isValid = await window.crypto.subtle.verify(
+
+    const isValid = await crypto.subtle.verify(
       {
         name: 'ECDSA',
         hash: { name: 'SHA-384' },
@@ -286,7 +290,7 @@ export async function verifySignature(publicKey, signature, data) {
       signatureBuffer,
       dataBuffer
     );
-    
+
     return isValid;
   } catch (error) {
     console.error('Error verifying signature:', error);
@@ -306,8 +310,8 @@ export async function verifySignature(publicKey, signature, data) {
 export async function encryptAES(key, plaintext, iv) {
   try {
     const plaintextBuffer = stringToArrayBuffer(plaintext);
-    
-    const encrypted = await window.crypto.subtle.encrypt(
+
+    const encrypted = await crypto.subtle.encrypt(
       {
         name: 'AES-GCM',
         iv: iv,
@@ -345,13 +349,13 @@ export async function decryptAES(key, ciphertext, authTag, iv) {
   try {
     const ciphertextBuffer = base64ToArrayBuffer(ciphertext);
     const authTagBuffer = base64ToArrayBuffer(authTag);
-    
+
     // Concatenate ciphertext and auth tag for Web Crypto API
     const combined = new Uint8Array(ciphertextBuffer.byteLength + authTagBuffer.byteLength);
     combined.set(new Uint8Array(ciphertextBuffer), 0);
     combined.set(new Uint8Array(authTagBuffer), ciphertextBuffer.byteLength);
 
-    const decrypted = await window.crypto.subtle.decrypt(
+    const decrypted = await crypto.subtle.decrypt(
       {
         name: 'AES-GCM',
         iv: iv,
@@ -376,7 +380,7 @@ export async function decryptAES(key, ciphertext, authTag, iv) {
  */
 export async function generateAESKey() {
   try {
-    const key = await window.crypto.subtle.generateKey(
+    const key = await crypto.subtle.generateKey(
       {
         name: 'AES-GCM',
         length: 256,
@@ -398,7 +402,7 @@ export async function generateAESKey() {
  */
 export async function exportAESKey(key) {
   try {
-    const exported = await window.crypto.subtle.exportKey('raw', key);
+    const exported = await crypto.subtle.exportKey('raw', key);
     return arrayBufferToBase64(exported);
   } catch (error) {
     console.error('Error exporting AES key:', error);
@@ -414,7 +418,7 @@ export async function exportAESKey(key) {
 export async function importAESKey(base64Key) {
   try {
     const keyData = base64ToArrayBuffer(base64Key);
-    return await window.crypto.subtle.importKey(
+    return await crypto.subtle.importKey(
       'raw',
       keyData,
       { name: 'AES-GCM' },
@@ -436,7 +440,7 @@ export async function importAESKey(base64Key) {
  */
 export function generateRandomBytes(length) {
   const array = new Uint8Array(length);
-  window.crypto.getRandomValues(array);
+  crypto.getRandomValues(array);
   return array;
 }
 
@@ -476,7 +480,7 @@ export function generateSalt() {
 export async function hashSHA256(data) {
   try {
     const dataBuffer = stringToArrayBuffer(data);
-    const hashBuffer = await window.crypto.subtle.digest('SHA-256', dataBuffer);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', dataBuffer);
     return arrayBufferToBase64(hashBuffer);
   } catch (error) {
     console.error('Error hashing data:', error);

@@ -101,6 +101,36 @@ export async function loginUser(email, password) {
 }
 
 /**
+ * Login as guest
+ * Generates a random guest account and registers it
+ */
+export async function loginAsGuest() {
+  try {
+    console.log('👤 Initiating guest login...');
+
+    // Generate random guest number (1000-99999)
+    const guestNum = Math.floor(Math.random() * 99000) + 1000;
+    const username = `guest_${guestNum}`;
+    const email = `${username}@guest.com`;
+    // Generate a random secure password
+    const password = Array(16).fill(0).map(() => Math.random().toString(36).charAt(2)).join('');
+
+    console.log(`👤 Creating guest account: ${username}`);
+
+    // Use existing registration flow
+    return await registerUser(email, password, username);
+  } catch (error) {
+    console.error('Error logging in as guest:', error);
+    // If username taken (rare but possible), try again recursively
+    if (error.message.includes('already exists')) {
+      console.log('⚠️ Guest username collision, retrying...');
+      return loginAsGuest();
+    }
+    throw error;
+  }
+}
+
+/**
  * Logout user
  */
 export async function logoutUser() {

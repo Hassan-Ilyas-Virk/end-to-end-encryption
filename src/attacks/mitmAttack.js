@@ -19,9 +19,9 @@ import {
   importECDSAPrivateKey,
   importECDSAPublicKey,
   generateSalt,
-} from '../utils/crypto';
+} from '../utils/crypto.js';
 
-import { logSecurityEvent } from '../utils/securityLogger';
+import { logSecurityEvent } from '../utils/securityLogger-mongo.js';
 
 /**
  * Scenario 1: Demonstrate MITM attack on UNSIGNED Diffie-Hellman
@@ -29,29 +29,29 @@ import { logSecurityEvent } from '../utils/securityLogger';
  */
 export async function demonstrateMITMWithoutSignatures() {
   console.log('\n=== MITM ATTACK DEMONSTRATION: Without Signatures ===\n');
-  
+
   console.log('Step 1: Alice generates her ECDH key pair');
   const aliceKeyPair = await generateECDHKeyPair();
   const alicePublicKey = await exportPublicKey(aliceKeyPair.publicKey);
   console.log('✓ Alice public key generated');
-  
+
   console.log('\nStep 2: Alice sends her public key to Bob');
   console.log('Public key (first 50 chars):', alicePublicKey.substring(0, 50) + '...');
-  
+
   console.log('\n🔴 Step 3: ATTACKER INTERCEPTS the transmission!');
   console.log('Attacker generates their own key pair');
   const attackerKeyPair = await generateECDHKeyPair();
   const attackerPublicKey = await exportPublicKey(attackerKeyPair.publicKey);
   console.log('✓ Attacker public key generated');
-  
+
   console.log('\n🔴 Step 4: ATTACKER REPLACES Alice\'s public key with their own');
   console.log('Attacker sends their public key to Bob, pretending to be Alice');
-  
+
   console.log('\nStep 5: Bob receives what he thinks is Alice\'s public key');
   console.log('(But it\'s actually the attacker\'s public key!)');
   const bobKeyPair = await generateECDHKeyPair();
   const bobPublicKeyForAttacker = await exportPublicKey(bobKeyPair.publicKey);
-  
+
   // Bob derives shared secret with attacker (thinking it's Alice)
   const attackerPublicKeyObj = await importECDHPublicKey(attackerPublicKey);
   const bobSharedSecretWithAttacker = await deriveSharedSecret(
@@ -59,7 +59,7 @@ export async function demonstrateMITMWithoutSignatures() {
     attackerPublicKeyObj
   );
   console.log('✓ Bob derives shared secret (with attacker, not Alice!)');
-  
+
   console.log('\n🔴 Step 6: Bob sends his public key to Alice');
   console.log('ATTACKER INTERCEPTS again!');
   console.log('Attacker derives shared secret with Bob');
@@ -68,7 +68,7 @@ export async function demonstrateMITMWithoutSignatures() {
     attackerKeyPair.privateKey,
     bobPublicKeyObj
   );
-  
+
   console.log('\n🔴 Step 7: Attacker sends their public key to Alice, pretending to be Bob');
   const alicePublicKeyObj = await importECDHPublicKey(alicePublicKey);
   const attackerSharedSecretWithAlice = await deriveSharedSecret(
@@ -76,20 +76,20 @@ export async function demonstrateMITMWithoutSignatures() {
     aliceKeyPair.publicKey
   );
   console.log('✓ Attacker derives shared secret with Alice');
-  
+
   console.log('\n❌ RESULT: MITM ATTACK SUCCESSFUL!');
   console.log('- Alice has a shared secret with the attacker (thinks it\'s Bob)');
   console.log('- Bob has a shared secret with the attacker (thinks it\'s Alice)');
   console.log('- Attacker can decrypt messages from both parties and re-encrypt them');
   console.log('- Neither Alice nor Bob know they\'re being attacked!');
-  
+
   await logSecurityEvent(
     null,
     'MITM_DEMO_UNSIGNED',
     'MITM attack demonstration: Unsigned DH is vulnerable',
     'CRITICAL'
   );
-  
+
   return {
     success: true,
     vulnerability: 'Unsigned Diffie-Hellman key exchange',
@@ -104,56 +104,56 @@ export async function demonstrateMITMWithoutSignatures() {
  */
 export async function demonstrateMITMWithSignatures() {
   console.log('\n=== MITM ATTACK DEMONSTRATION: With Signatures ===\n');
-  
+
   console.log('Step 1: Alice generates ECDH key pair AND signing key pair');
   const aliceECDHKeyPair = await generateECDHKeyPair();
   const aliceSignKeyPair = await generateECDSAKeyPair();
   const alicePublicKey = await exportPublicKey(aliceECDHKeyPair.publicKey);
   const aliceSignPublicKey = await exportPublicKey(aliceSignKeyPair.publicKey);
   console.log('✓ Alice has ECDH keys (for encryption) and ECDSA keys (for signing)');
-  
+
   console.log('\nStep 2: Alice creates a message with her public key');
   const aliceMessage = JSON.stringify({
     sender: 'Alice',
     publicKey: alicePublicKey,
     timestamp: Date.now(),
   });
-  
+
   console.log('\nStep 3: Alice SIGNS the message with her private signing key');
   const aliceSignPrivateKey = await exportPrivateKey(aliceSignKeyPair.privateKey);
   const aliceSignPrivateKeyObj = await importECDSAPrivateKey(aliceSignPrivateKey);
   const aliceSignature = await signData(aliceSignPrivateKeyObj, aliceMessage);
   console.log('✓ Alice creates digital signature');
   console.log('Signature (first 50 chars):', aliceSignature.substring(0, 50) + '...');
-  
+
   console.log('\nStep 4: Alice sends: {message, signature, signing_public_key}');
-  
+
   console.log('\n🔴 Step 5: ATTACKER INTERCEPTS the transmission!');
   console.log('Attacker generates their own keys');
   const attackerECDHKeyPair = await generateECDHKeyPair();
   const attackerSignKeyPair = await generateECDSAKeyPair();
   const attackerPublicKey = await exportPublicKey(attackerECDHKeyPair.publicKey);
-  
+
   console.log('\n🔴 Step 6: Attacker tries to replace Alice\'s public key');
   const attackerMessage = JSON.stringify({
     sender: 'Alice', // Pretending to be Alice
     publicKey: attackerPublicKey, // But using attacker's key
     timestamp: Date.now(),
   });
-  
+
   console.log('Attacker needs to create a valid signature...');
   console.log('But attacker doesn\'t have Alice\'s private signing key!');
-  
+
   console.log('\n🔴 Step 7: Attacker has two options:');
   console.log('Option A: Send modified message with Alice\'s signature (will fail verification)');
   console.log('Option B: Send modified message with attacker\'s signature and key (Bob will notice different key)');
-  
+
   console.log('\nStep 8: Bob receives the message and verifies signature');
   console.log('Bob has Alice\'s authentic signing public key (from a trusted channel)');
-  
+
   // Bob verifies using Alice's signing public key
   const aliceSignPublicKeyObj = await importECDSAPublicKey(aliceSignPublicKey);
-  
+
   console.log('\nAttempting to verify attacker\'s modified message with Alice\'s signature...');
   const isValidOriginal = await verifySignature(
     aliceSignPublicKeyObj,
@@ -161,28 +161,28 @@ export async function demonstrateMITMWithSignatures() {
     aliceMessage
   );
   console.log('Original message verification:', isValidOriginal ? '✅ VALID' : '❌ INVALID');
-  
+
   const isValidModified = await verifySignature(
     aliceSignPublicKeyObj,
     aliceSignature,
     attackerMessage
   );
   console.log('Modified message verification:', isValidModified ? '✅ VALID' : '❌ INVALID');
-  
+
   console.log('\n✅ RESULT: MITM ATTACK BLOCKED!');
   console.log('Signature verification fails because:');
   console.log('- The attacker modified the message content');
   console.log('- The signature was created for the original message');
   console.log('- Without Alice\'s private key, attacker cannot create a valid signature');
   console.log('- Bob detects tampering and rejects the message');
-  
+
   await logSecurityEvent(
     null,
     'MITM_DEMO_SIGNED',
     'MITM attack demonstration: Signatures successfully prevent attack',
     'INFO'
   );
-  
+
   return {
     success: false, // Attack was not successful
     protection: 'Digital signatures (ECDSA)',
@@ -196,28 +196,28 @@ export async function demonstrateMITMWithSignatures() {
  */
 export async function compareSecurityModels() {
   console.log('\n=== SECURITY MODEL COMPARISON ===\n');
-  
+
   console.log('Testing MITM attack on both models...\n');
-  
+
   const resultWithout = await demonstrateMITMWithoutSignatures();
   const resultWith = await demonstrateMITMWithSignatures();
-  
+
   console.log('\n=== COMPARISON SUMMARY ===\n');
-  
+
   console.log('WITHOUT Digital Signatures:');
   console.log('  Attack Success:', resultWithout.success ? '❌ YES' : '✅ NO');
   console.log('  Vulnerability:', resultWithout.vulnerability);
   console.log('  Impact:', resultWithout.impact);
-  
+
   console.log('\nWITH Digital Signatures:');
   console.log('  Attack Success:', resultWith.success ? '❌ YES' : '✅ NO');
   console.log('  Protection:', resultWith.protection);
   console.log('  Result:', resultWith.result);
-  
+
   console.log('\n=== CONCLUSION ===');
   console.log('Digital signatures are ESSENTIAL for preventing MITM attacks!');
   console.log('Our protocol uses ECDSA signatures to authenticate all key exchanges.');
-  
+
   return {
     withoutSignatures: resultWithout,
     withSignatures: resultWith,
@@ -229,7 +229,7 @@ export async function compareSecurityModels() {
  */
 export function generateMITMReport(comparisonResults) {
   const timestamp = new Date().toISOString();
-  
+
   return `
 # Man-in-the-Middle (MITM) Attack Demonstration Report
 
@@ -390,3 +390,10 @@ This combination provides:
 `;
 }
 
+// Execute the demonstration when run directly
+compareSecurityModels().then((results) => {
+  console.log(generateMITMReport(results));
+}).catch((error) => {
+  console.error('Error running MITM demonstration:', error);
+  process.exit(1);
+});
